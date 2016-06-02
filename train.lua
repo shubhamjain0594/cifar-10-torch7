@@ -112,3 +112,46 @@ function Trainer:scheduler(epoch)
     decay = math.floor((epoch - 1) / 30)
     return self.opt.learningRate* math.pow(0.1, decay)
 end
+
+function Trainer:validate()
+	--[[--
+    Validate model for an epoch. Loads data too.
+    --]]--
+    print("=> Validating")
+    self.model:evaluate() -- Convert model to evaluate mode
+
+    local count = 0
+    local tic = torch.tic()
+    local valLoss = 0
+    local numBatches = 0
+    self.confusion:zero()
+
+    local input, target, output
+    for input_, target_ in self.dataGen:valGenerator(self.batchSize) do
+		if self.opt.backend ~= 'nn' then
+		    input = input_:cuda(); target = target_:cuda()
+		else
+		    input = input_; target = target_
+		end
+
+		xlua.progress(count+input:size(1), self.dataGen.vsize)
+
+		-- Forward pass
+		output = self.model:forward(input)
+		-- print(output)
+		-- print(target)
+		local loss = self.criterion:forward(output, target)
+		self.confusion:batchAdd(output, target)
+
+		valLoss = valLoss + loss
+		count = count + input:size(1)
+		numBatches = numBatches + 1
+	end
+
+	-- Keep track of losses and accuracies
+	self.confusion:updateValids()
+	local valAcc = self.confusion.totalValid*100
+	print(('Validation Loss: '..c.cyan'%.4f'..' Accuracy: '..c.cyan'%.2f'..' \t time: %.2f s'):format(valLoss/numBatches, valAcc, torch.toc(tic)))
+
+	return valLoss/numBatches
+end

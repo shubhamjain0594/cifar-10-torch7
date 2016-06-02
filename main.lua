@@ -3,8 +3,9 @@ Main file
 --]]
 
 local opt = {
-	backend = 'nn',
+	backend = 'cunn',
 	trsize = 1000,
+	vsize = 200,
 	tssize = 100,
 	maxEpochs = 100,
 	learningRate = 0.01
@@ -27,14 +28,15 @@ end
 
 -- Load dataset
 require 'dataset/loaddata.lua'
-dl = DataLoader('dataset/')
-dl:resizeData(opt.trsize,opt.tssize)
+dl = DataLoader('/data/')
+dl:resizeData(opt.trsize, opt.vsize, opt.tssize)
 
 require 'train.lua'
 local trainer = Trainer(net, criterion, dl, opt)
 
 for nEpoch=1,opt.maxEpochs do
 	local trainLoss = trainer:train()  --Train on training set
+	local valLoss = trainer:validate() --Valiate on valiadation set
 
 	print("Epoch "..nEpoch.." complete => "..trainLoss)
 end

@@ -15,6 +15,7 @@ function DataLoader:__init(path)
 	-- tssize : size of test data
 	self.trsize = 50000
 	self.tssize = 10000
+	self.vsize = 0
 
 	--loading dataset
 
@@ -52,9 +53,10 @@ function DataLoader:__init(path)
 	self.testData = testData
 end
 
-function DataLoader:resizeData(trsize, tssize)
+function DataLoader:resizeData(trsize, vsize, tssize)
 	-- resizes data if working on smaller version
 	self.trsize = trsize
+	self.vsize = vsize
 	self.tssize = tssize
 
 	-- randomly selects trsize data from Training data
@@ -64,10 +66,20 @@ function DataLoader:resizeData(trsize, tssize)
 		size = function() return self.trsize end
 	}
 
+	local validationData = {
+		data = torch.Tensor(vsize, 3, 32, 32),
+		labels = torch.Tensor(vsize),
+		size = function() return self.vsize end
+	}
+
 	local trainDataIndices = torch.randperm(50000)
 	for i = 1,trsize do
 		trainData.data[i] = self.trainData.data[trainDataIndices[i]]
 		trainData.labels[i] = self.trainData.labels[trainDataIndices[i]]
+	end
+	for i = trsize+1,trsize+vsize do
+		validationData.data[i-trsize] = self.trainData.data[trainDataIndices[i]]
+		validationData.labels[i-trsize] = self.trainData.labels[trainDataIndices[i]]
 	end
 
 	-- randomly selects tssize data from Testing data
@@ -84,30 +96,51 @@ function DataLoader:resizeData(trsize, tssize)
 	end
 
 	self.trainData = trainData
+	self.validationData = validationData
 	self.testData = testData
 end
 
-function DataLoader:trainGenerator(batchSize)
-	-- Sends batches of data
-	local batchSize = batchSize or 32
-	
-	local dataIndices = torch.randperm(self.trsize)
+function DataLoader:generator(data, batchSize)
+	-- Generalized generator that generates batches during training and validation
+
+	local working_data
+	if data == "train" then
+		working_data = self.trainData
+	else
+		working_data = self.validationData
+	end
+
+	local dataIndices = torch.randperm(working_data:size(1))
 	local batches = dataIndices:split(batchSize)
 	local i = 1
 
 	local function iterator()
-		-- body
+		-- Iterator function that returns a batch at a time when called in a for loop
 		if i < #batches then
 			local currentBatch = batches[i]
 			local imgList = torch.Tensor(batchSize,3,32,32)
 			local clsList = torch.Tensor(batchSize)
 			for j = 1,currentBatch:size(1) do
-				imgList[j] = self.trainData.data[currentBatch[j]]
-				clsList[j] = self.trainData.labels[currentBatch[j]]
+				imgList[j] = working_data.data[currentBatch[j]]
+				clsList[j] = working_data.labels[currentBatch[j]]
 			end
 			i = i + 1
 			return imgList, clsList
 		end
 	end
 	return iterator
+end
+
+
+function DataLoader:trainGenerator(batchSize)
+	-- Sends batches of data for training
+	local batchSize = batchSize or 32
+	return self:generator("train",batchSize)
+end
+
+
+function  DataLoader:valGenerator(batchSize)
+	-- Sends batches of data for validation
+	local batchSize = batchSize or 32
+	return self:generator("validation",batchSize)
 end
